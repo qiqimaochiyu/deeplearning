@@ -1,1 +1,89 @@
 
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan 12 19:36:18 2018
+
+@author: macbook
+"""
+
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+tf.reset_default_graph()
+
+np.random.seed(42)
+tf.set_random_seed(42)
+
+from tensorflow.examples.tutorials.mnist import input_data
+
+mnist = input_data.read_data_sets("/tmp/data")
+
+n_samples = 5
+
+plt.figure(figsize=(n_samples * 2, 3))
+for index in range(n_samples):
+    plt.subplot(1, n_samples, index + 1)
+    sample_image = mnist.train.images[index].reshape(28, 28)
+    plt.imshow(sample_image, cmap='binary')
+    plt.axis('off')
+    
+plt.show()
+
+X = tf.placeholder(shape=[None, 28, 28, 1], dtype=tf.float32, name='X')
+y = tf.placeholder(shape=[None], dtype=tf.int64, name='y')
+
+conv1_params = {
+        'filters': 256,
+        'kernel_size': 9,
+        'strides': 1,
+        'padding': 'valid',
+        'activation': tf.nn.relu,
+        }
+
+conv1 = tf.layers.conv2d(X, name='conv1', **conv1_params)
+
+caps1_n_maps = 32
+caps1_n_dims = 8
+
+conv2_params = {
+        'filters': caps1_n_maps * caps1_n_dims,
+        'kernel_size': 9,
+        'strides': 2,
+        'padding': 'valid',
+        'activation': tf.nn.relu,
+        }
+
+conv2 = tf.layers.conv2d(conv1, name='conv2', **conv2_params)
+
+caps1_n_caps = caps1_n_maps * 6 * 6 
+
+caps1_raw = tf.reshape(conv2, [-1, caps1_n_caps, caps1_n_dims], name='caps1_raw')
+
+def squash(s, axis=-1, epsilon=1e-7, name=None):
+    with tf.name_scope(name, deault_name='squash'):
+        squared_norm = tf.reduce_sum(tf.square(s), axis=axis, keep_dims=True)
+        safe_norm = tf.sqrt(squared_norm + epsilon)
+        squash_factor = squared_norm / (1. + squared_norm)
+        unit_vector = s / safe_norm
+        return squash_factor * unit_vector
+    
+caps1_output = squash(caps1_raw, name='caps1_output')
+
+caps2_n_caps = 10
+caps2_n_dims = 16
+
+init_sigma = 0.01
+
+W_init = tf.random_normal(
+        shape=(1, caps1_n_caps, caps2_n_caps, caps2_n_dims, caps1_n_dims),
+        stddev=init_sigma, dtype=tf.float32, name='W_init')
+
+W = tf.Variable(W_init, name='W')
+
+
+batch_size = tf.shape(X)[0]
+
+W_tiled = tf.tile(W, [batch_size, 1, 1, 1, 1], name='W_tiled')
+
